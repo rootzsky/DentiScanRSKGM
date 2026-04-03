@@ -1,10 +1,31 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Examination, Patient } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Lazy initialization to prevent crash on startup if API key is missing
+let aiInstance: GoogleGenAI | null = null;
+
+function getAI() {
+  if (!aiInstance) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn("GEMINI_API_KEY is not defined. AI features will be disabled.");
+      return null;
+    }
+    aiInstance = new GoogleGenAI({ apiKey });
+  }
+  return aiInstance;
+}
 
 export async function analyzeExamination(patient: Patient, exam: Examination) {
   try {
+    const ai = getAI();
+    if (!ai) {
+      return {
+        diagnosis: "Layanan AI tidak tersedia (API Key belum dikonfigurasi).",
+        rekomendasi: "Silakan hubungi administrator untuk mengonfigurasi API Key.",
+      };
+    }
+
     const prompt = `
       Analisis hasil pemeriksaan gigi dan mulut untuk pasien berikut:
       Nama: ${patient.namaLengkap}
@@ -57,6 +78,14 @@ export async function analyzeExamination(patient: Patient, exam: Examination) {
 
 export async function analyzeDatabase(patients: Patient[], exams: Examination[], filterDesc: string) {
   try {
+    const ai = getAI();
+    if (!ai) {
+      return {
+        summary: "Layanan AI tidak tersedia (API Key belum dikonfigurasi).",
+        recommendations: "Silakan hubungi administrator untuk mengonfigurasi API Key.",
+      };
+    }
+
     const prompt = `
       Analisis data epidemiologi kesehatan gigi dan mulut dari database berikut:
       Filter yang dipilih: ${filterDesc}
