@@ -46,3 +46,13 @@
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
 }
+
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  body { background: white !important; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .print-break-inside-avoid { page-break-inside: avoid; break-inside: avoid; }
+}
+
+.print-only { display: none; }

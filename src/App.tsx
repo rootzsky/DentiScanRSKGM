@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   User, 
@@ -14,7 +14,10 @@ import {
   LayoutDashboard,
   Trees,
   ChevronRight,
-  ArrowLeft
+  ArrowLeft,
+  X,
+  AlertCircle,
+  Printer
 } from "lucide-react";
 import Login from "./components/Login";
 import Register from "./components/Register";
@@ -122,13 +125,84 @@ const MOCK_PATIENTS: Patient[] = [
   }
 ];
 
+// Error Boundary Component
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
+          <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-rose-100 text-center space-y-6">
+            <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto">
+              <Activity size={40} className="text-rose-500" />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-800">Ups! Terjadi Kesalahan</h1>
+            <p className="text-slate-500 text-sm">
+              Aplikasi mengalami kendala teknis. Silakan coba muat ulang halaman atau hubungi administrator.
+            </p>
+            <div className="bg-slate-50 p-4 rounded-2xl text-left overflow-auto max-h-40">
+              <code className="text-xs text-rose-600">{this.state.error?.toString()}</code>
+            </div>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-nature-brown text-white py-3 rounded-2xl font-bold hover:bg-nature-brown/90 transition-all"
+            >
+              Muat Ulang Halaman
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [view, setView] = useState<View>("LOGIN");
   const [activeTab, setActiveTab] = useState<Tab>("IDENTITAS");
   const [user, setUser] = useState<string | null>(null);
   
   const [patients, setPatients] = useState<Patient[]>(MOCK_PATIENTS);
   const [exams, setExams] = useState<Examination[]>([]);
+  
+  // Custom Notification State
+  const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+
+  const showNotification = (message: string, type: "success" | "error" | "info" = "success") => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
   
   const getNextNoRM = (patientList: Patient[]) => {
     const lastNoRM = patientList.reduce((max, p) => {
@@ -164,7 +238,7 @@ export default function App() {
 
   const handleSaveToDatabase = () => {
     if (!currentPatient.namaLengkap) {
-      alert("Nama lengkap pasien harus diisi!");
+      showNotification("Nama lengkap pasien harus diisi!", "error");
       return;
     }
 
@@ -188,7 +262,7 @@ export default function App() {
     
     setExams(prev => [...prev, newExam]);
     
-    alert("Data berhasil disimpan ke database!");
+    showNotification("Data berhasil disimpan ke database!");
     setActiveTab("DATABASE");
   };
 
@@ -224,10 +298,15 @@ export default function App() {
   };
 
   const handleDeletePatient = (id: string) => {
-    if (confirm("Apakah Anda yakin ingin menghapus data pasien ini?")) {
-      setPatients(prev => prev.filter(p => p.id !== id));
-      setExams(prev => prev.filter(e => e.patientId !== id));
-    }
+    setConfirmDialog({
+      message: "Apakah Anda yakin ingin menghapus data pasien ini?",
+      onConfirm: () => {
+        setPatients(prev => prev.filter(p => p.id !== id));
+        setExams(prev => prev.filter(e => e.patientId !== id));
+        showNotification("Data pasien berhasil dihapus", "info");
+        setConfirmDialog(null);
+      }
+    });
   };
 
   const handleNextTab = () => {
@@ -340,6 +419,7 @@ export default function App() {
                   patient={currentPatient as Patient} 
                   exam={currentExam as Examination} 
                   onUpdateExam={setCurrentExam} 
+                  showNotification={showNotification}
                 />
               )}
               {activeTab === "DATABASE" && (
@@ -348,12 +428,75 @@ export default function App() {
                   exams={exams} 
                   onDelete={handleDeletePatient}
                   onEdit={handleEditPatient}
+                  user={user}
+                  showNotification={showNotification}
                 />
               )}
             </motion.div>
           </AnimatePresence>
         </div>
       </main>
+
+      {/* Custom Notification Toast */}
+      <AnimatePresence>
+        {notification && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-8 right-8 z-[100]"
+          >
+            <div className={cn(
+              "px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border",
+              notification.type === "success" ? "bg-emerald-500 border-emerald-400 text-white" :
+              notification.type === "error" ? "bg-rose-500 border-rose-400 text-white" :
+              "bg-nature-brown border-nature-brown/50 text-white"
+            )}>
+              {notification.type === "success" ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+              <span className="font-bold text-sm">{notification.message}</span>
+              <button onClick={() => setNotification(null)} className="ml-2 opacity-70 hover:opacity-100">
+                <X size={16} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmation Dialog */}
+      <AnimatePresence>
+        {confirmDialog && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-6"
+            >
+              <div className="bg-rose-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto text-rose-500">
+                <AlertCircle size={32} />
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-bold text-slate-800">Konfirmasi Hapus</h3>
+                <p className="text-slate-500 text-sm leading-relaxed">{confirmDialog.message}</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirmDialog(null)}
+                  className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={confirmDialog.onConfirm}
+                  className="flex-1 py-3 bg-rose-500 text-white rounded-2xl font-bold hover:bg-rose-600 transition-all shadow-lg shadow-rose-500/20"
+                >
+                  Ya, Hapus
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Footer Actions */}
       {activeTab !== "DATABASE" && (

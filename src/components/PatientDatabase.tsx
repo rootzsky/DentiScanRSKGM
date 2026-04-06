@@ -10,9 +10,11 @@ interface PatientDatabaseProps {
   exams: Examination[];
   onDelete: (id: string) => void;
   onEdit: (patient: Patient) => void;
+  user: string | null;
+  showNotification: (message: string, type?: "success" | "error" | "info") => void;
 }
 
-export default function PatientDatabase({ patients, exams, onDelete, onEdit }: PatientDatabaseProps) {
+export default function PatientDatabase({ patients, exams, onDelete, onEdit, user, showNotification }: PatientDatabaseProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterJK, setFilterJK] = useState<string>("");
   const [filterAgeRange, setFilterAgeRange] = useState<string>("");
@@ -102,8 +104,18 @@ export default function PatientDatabase({ patients, exams, onDelete, onEdit }: P
   };
 
   const handlePrint = () => {
-    window.focus();
-    window.print();
+    try {
+      showNotification("Mempersiapkan database untuk dicetak...", "info");
+      window.focus();
+      window.print();
+      
+      if (window.self !== window.top) {
+        showNotification("Jika dialog cetak tidak muncul, silakan klik 'Buka di tab baru' di pojok kanan atas.", "info");
+      }
+    } catch (e) {
+      console.error("Print failed:", e);
+      document.execCommand('print', false, undefined);
+    }
   };
 
   return (
@@ -112,22 +124,74 @@ export default function PatientDatabase({ patients, exams, onDelete, onEdit }: P
         @media print {
           .no-print { display: none !important; }
           .print-only { display: block !important; }
-          body { background: white !important; }
+          body { background: white !important; padding: 0 !important; margin: 0 !important; }
           .bg-white { border: none !important; box-shadow: none !important; }
-          table { width: 100% !important; border-collapse: collapse !important; }
-          th, td { border: 1px solid #e2e8f0 !important; padding: 12px !important; }
+          table { width: 100% !important; border-collapse: collapse !important; margin-top: 20px; }
+          th, td { border: 1px solid #cbd5e1 !important; padding: 10px !important; text-align: left !important; font-size: 10px !important; }
+          th { background-color: #f8fafc !important; color: #1e293b !important; font-weight: bold !important; }
           main { overflow: visible !important; height: auto !important; padding: 0 !important; }
           .min-h-screen { min-height: auto !important; }
           .overflow-hidden, .overflow-x-auto { overflow: visible !important; }
           * { transform: none !important; animation: none !important; transition: none !important; }
+          .print-header { border-bottom: 4px solid #3E2723 !important; padding-bottom: 20px !important; margin-bottom: 30px !important; }
         }
       `}} />
       
-      <div className="hidden print-only text-center mb-8">
-        <h1 className="text-3xl font-bold text-slate-800">DentiScan RSKGM - Database Pasien</h1>
-        <p className="text-slate-500">Laporan Rekam Medis Pasien - {new Date().toLocaleDateString('id-ID')}</p>
-      </div>
+      <div className="hidden print-only">
+        <div className="print-header text-center">
+          <h1 className="text-3xl font-black text-nature-brown uppercase tracking-tighter">Database Rekam Medis Pasien</h1>
+          <p className="text-slate-500 font-bold">Sistem Informasi DentiScan RSKGM</p>
+          <div className="flex justify-between mt-6 text-xs font-bold text-slate-400">
+            <span>Dicetak oleh: {user || "Administrator"}</span>
+            <span>Tanggal Cetak: {new Date().toLocaleString('id-ID')}</span>
+          </div>
+        </div>
 
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th>No. RM</th>
+              <th>Nama Lengkap</th>
+              <th>NIK</th>
+              <th>Gender</th>
+              <th>Tgl Lahir</th>
+              <th>Alamat</th>
+              <th>Pekerjaan</th>
+              <th>DMF-T</th>
+              <th>OHI-S</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredPatients.map(p => {
+              const latestExam = exams.filter(e => e.patientId === p.id).sort((a, b) => 
+                new Date(b.tanggalPeriksa).getTime() - new Date(a.tanggalPeriksa).getTime()
+              )[0];
+              return (
+                <tr key={p.id}>
+                  <td className="font-bold">{p.noRM}</td>
+                  <td>{p.namaLengkap}</td>
+                  <td>{p.nik || "-"}</td>
+                  <td>{p.jenisKelamin}</td>
+                  <td>{p.tanggalLahir}</td>
+                  <td>{p.alamat}</td>
+                  <td>{p.pekerjaan}</td>
+                  <td className="text-center font-bold">{latestExam?.dmft?.total || "-"}</td>
+                  <td className="text-center font-bold">{latestExam?.ohisScore || "-"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        
+        <div className="mt-12 flex justify-end">
+          <div className="text-center space-y-12">
+            <p className="text-xs font-bold text-slate-400">Petugas Rekam Medis,</p>
+            <div className="w-40 border-b border-slate-300 mx-auto"></div>
+            <p className="text-xs font-bold text-slate-800">(..................................................)</p>
+          </div>
+        </div>
+      </div>
+      
       {/* Header & Filters */}
       <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6 no-print">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -138,6 +202,14 @@ export default function PatientDatabase({ patients, exams, onDelete, onEdit }: P
             </p>
           </div>
           <div className="flex items-center gap-3">
+            {window.self !== window.top && (
+              <div className="bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl flex items-center gap-2 animate-pulse">
+                <AlertCircle size={12} className="text-amber-600" />
+                <span className="text-[10px] text-amber-700 font-bold leading-tight">
+                  Cetak terblokir di pratinjau. <br/> Gunakan "Buka di tab baru"
+                </span>
+              </div>
+            )}
             <button 
               onClick={() => setShowStats(!showStats)}
               className={`flex items-center gap-2 px-6 py-2.5 rounded-2xl font-bold transition-all ${
